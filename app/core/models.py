@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
@@ -49,13 +50,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         FACEBOOK = 'facebook', _('Facebook')
         GOOGLE = 'google', _('Google')
         TWITTER = 'twitter', _('Twitter')
-    
+
     uid = models.CharField(_('uid'), max_length=255, null=True, blank=True)
     email = models.EmailField(_('email address'), max_length=70, unique=True)
-    username = models.CharField(_('username'),max_length=30, unique=True)
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
-    phone_number = models.CharField(_('phone'), null=True, blank=True)
+    phone_number = models.CharField(_('phone'), max_length=17, null=True, blank=True)
     date_of_birth = models.DateField(_('date of birth'), null=True, blank=True)
     gender = models.CharField(_('gender'), max_length=10, choices=GenderUnitChoices.choices, null=True, blank=True)
     address = models.TextField(_('address'), max_length=255, blank=True, null=True)
@@ -68,7 +68,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     timezone = models.CharField(_('timezone'), max_length=5, default='UTC')
     email_verified_at = models.DateTimeField(_('email verified at'), null=True, blank=True)
     last_notification_seen = models.DateTimeField(_('last notification seen'), blank=True, null=True)
-    
+
     is_online = models.BooleanField(_('is online'), default=False)
     is_available = models.BooleanField(_('is available'), default=False)
     is_verified_driver = models.BooleanField(_('verified driver'), default=False)
@@ -87,9 +87,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
-    EMAIL_FIELD = 'email'
-    USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']
 
     def __str__(self):
         return self.email
@@ -108,3 +107,63 @@ class User(AbstractBaseUser, PermissionsMixin):
         if (today.month < self.date_of_birth.month or (today.month == self.date_of_birth.month and today.day < self.date_of_birth.day)):
             age -= 1
         return age
+
+
+class UserDetail(models.Model):
+    user_id = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    car_model = models.CharField(_('car model'), max_length=50, blank=True, null=True)
+    car_color = models.CharField(_('car color'), max_length=50, blank=True, null=True)
+    car_plate_number = models.CharField(_('car plate number'), max_length=20, blank=True, null=True)
+    car_production_year = models.CharField(_('car production year'), max_length=4, blank=True, null=True)
+    work_address = models.TextField(_('work address'), blank=True, null=True)
+    home_address = models.TextField(_('home address'), blank=True, null=True)
+    work_latitude = models.DecimalField(_('work latitude'), blank=True, null=True, max_digits=9, decimal_places=6)
+    work_longitude = models.DecimalField(_('work longitude'), blank=True, null=True, max_digits=9, decimal_places=6)
+    home_latitude = models.DecimalField(_('home latitude'), blank=True, null=True, max_digits=9, decimal_places=6)
+    home_longitude = models.DecimalField(_('home longitude'), blank=True, null=True, max_digits=9, decimal_places=6)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+
+    class Meta:
+        verbose_name = _('user detail')
+        verbose_name_plural = _('user details')
+
+    def __str__(self):
+        return self.car_model if self.car_model else f"UserDetail {self.id}"
+
+
+class UserBankAccounts(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    bank_name = models.CharField(_('bank name'), max_length=30, blank=True, null=True)
+    bank_code = models.CharField(_('bank code'), max_length=40, blank=True, null=True)
+    account_holder_name = models.CharField(_('account holder name'), max_length=70, blank=True, null=True)
+    account_number = models.CharField(_('account number'), max_length=50, blank=True, null=True)
+    created_at = models.DateTimeField(_('created'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('user bank account')
+        verbose_name_plural = _('user bank accounts')
+
+    def __str__(self):
+        return self.bank_name or ''
+
+
+class Wallet(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    total_amount = models.FloatField(_('total amount'), blank=True, null=True)
+    online_received = models.FloatField(_('online received'), blank=True, null=True)
+    collected_cash = models.FloatField(_('collected cash'), blank=True, null=True)
+    manual_received = models.FloatField(_('manual received'), blank=True, null=True)
+    total_withdrawn = models.FloatField(_('total withdrawn'), blank=True, null=True)
+    currency = models.CharField(_('currency'), max_length=50, blank=True, null=True)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+
+    class Meta:
+        db_table = 'wallets'
+        verbose_name = _('wallet')
+        verbose_name_plural = _('wallets')
+        
+    def __str__(self):
+        return f"Wallet of {self.user}"

@@ -6,7 +6,7 @@ services:
     container_name: redis
 
   db:
-    image: postgres:alpine3.17
+    image: postgres:15.2-alpine3.17
     volumes:
       - dev-db-data:/var/lib/postresql/data
     environment:
