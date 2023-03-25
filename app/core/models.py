@@ -1,8 +1,20 @@
+import os
+import uuid
+import pytz
+
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+
+
+def user_image_file_path(instance, filename):
+    """Generate file path for new user image."""
+    ext = os.path.splitext(filename)[1]
+    filename = f'{uuid.uuid4()}{ext}'
+
+    return os.path.join('uploads', 'user', filename)
 
 
 class UserManager(BaseUserManager):
@@ -30,7 +42,10 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
 
+    TIMEZONE_CHOICES = tuple(zip(pytz.all_timezones_set, pytz.all_timezones_set))
+
     class UserTypeChoices(models.TextChoices):
+        ADMIN = 'admin', _('Admin')
         RIDER = 'rider', _('Rider')
         DRIVER = 'driver', _('Driver')
 
@@ -63,9 +78,11 @@ class User(AbstractBaseUser, PermissionsMixin):
     status = models.CharField(_('status'), max_length=20, choices=StatusUnitChoices.choices, default='pending')
 
     fcm_token = models.CharField(_('fcm token'), max_length=255, null=True, blank=True)
-    remember_token = models.CharField(_('remember token'), max_length=100, null=True, blank=True)
+    souvenir_token = models.CharField(_('souvenir token'), max_length=100, null=True, blank=True)
 
-    timezone = models.CharField(_('timezone'), max_length=5, default='UTC')
+    profile_image = models.ImageField(null=True, upload_to=user_image_file_path)
+
+    timezone = models.CharField(_('timezone'), max_length=50, choices=TIMEZONE_CHOICES, default='UTC')
     email_verified_at = models.DateTimeField(_('email verified at'), null=True, blank=True)
     last_notification_seen = models.DateTimeField(_('last notification seen'), blank=True, null=True)
 
@@ -93,6 +110,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.email
 
+    def has_perm(self, perm, obj=None):
+        return self.is_staff
+
+    def has_module_perms(self, app_label):
+        return self.is_staff
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
@@ -110,7 +133,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class UserDetail(models.Model):
-    user_id = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     car_model = models.CharField(_('car model'), max_length=50, blank=True, null=True)
     car_color = models.CharField(_('car color'), max_length=50, blank=True, null=True)
     car_plate_number = models.CharField(_('car plate number'), max_length=20, blank=True, null=True)
@@ -161,9 +184,23 @@ class Wallet(models.Model):
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
 
     class Meta:
-        db_table = 'wallets'
         verbose_name = _('wallet')
         verbose_name_plural = _('wallets')
-        
+
     def __str__(self):
         return f"Wallet of {self.user}"
+
+
+class Roles(models.Model):
+    name = models.CharField(_('name'), max_length=30, blank=True, null=True)
+    guard_name = models.CharField(_('guard name'), max_length=30, blank=True, null=True)
+    status = models.IntegerField(_('status'), blank=True, null=True)
+    created_at = models.DateTimeField(_('created'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('roles')
+        verbose_name_plural = _('roles')
+
+    def __str__(self):
+        return self.name

@@ -22,6 +22,7 @@ ALLOWED_HOSTS.extend(
     )
 )
 
+DEFAULT_FROM_EMAIL = 'drdevlopapplic@gmail.com' 
 
 # Application definition
 
@@ -32,13 +33,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
     'django_filters',
     'rest_framework',
     'rest_framework.authtoken',
     'drf_spectacular',
-
     'core',
+    'user',
 ]
 
 MIDDLEWARE = [
@@ -134,6 +134,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 GOOGLE_MAPS_API_KEY = ''
 
 AUTH_USER_MODEL = 'core.User'
+
+PER_PAGE_LIMIT = 20
 
 REDIS_HOST = 'redis'
 REDIS_PORT = 6379
