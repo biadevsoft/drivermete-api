@@ -8,10 +8,12 @@ from core import models
 class UserAdmin(BaseUserAdmin):
     """Define the admin pages for users."""
     ordering = ['id']
-    list_display = ['email', 'first_name', 'last_name']
+    list_display = ['email', 'username', 'user_type', 'created_at']
+    filter_horizontal = ()
+    list_filter = ('user_type', 'is_active', 'is_staff')
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        (_('Personal Info'), {'fields': ('status',)}),
+        (_('Personal Info'), {'fields': ('username', 'user_type')}),
         (
             _('Permissions'),
             {
@@ -22,9 +24,9 @@ class UserAdmin(BaseUserAdmin):
                 )
             }
         ),
-        (_('Important dates'), {'fields': ('last_login',)}),
+        (_('Important dates'), {'fields': ('last_login', 'created_at')}),
     )
-    readonly_fields = ['last_login']
+    readonly_fields = ['last_login', 'created_at']
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
@@ -32,8 +34,8 @@ class UserAdmin(BaseUserAdmin):
                 'email',
                 'password1',
                 'password2',
-                'first_name',
-                'last_name',
+                'username',
+                'user_type',
                 'is_active',
                 'is_staff',
                 'is_superuser',

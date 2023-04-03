@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from rest_framework import serializers, permissions
 
-from core.models import UserBankAccounts, UserDetail, Wallet
+from core.models import UserBankAccount, UserDetail, Wallet
 
 
 User = get_user_model()
@@ -13,7 +13,7 @@ User = get_user_model()
 
 class UserBankAccountSerializer(serializers.ModelSerializer):
     class Meta:
-        model = UserBankAccounts
+        model = UserBankAccount
         fields = '__all__'
 
         read_only_fields = ('id', 'created_at', 'updated_at')
@@ -89,69 +89,35 @@ class UserDetailSerializer(serializers.ModelSerializer):
         model = UserDetail
         fields = '__all__'
 
-
-class RestrictedUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = (
-            'id', 'uid', 'user_type', 'status', 'fcm_token',
-            'souvenir_token', 'email_verified_at', 'is_online',
-            'last_notification_seen', 'is_available', 'is_verified_driver',
-            'login_type', 'latitude', 'longitude',
-            'last_location_update_at', 'fleet_id', 'player_id',
-            'service_id', 'is_staff', 'is_active',
-        )
-
-
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=5)
+    password = serializers.CharField(write_only=True, min_length=4)
 
     class Meta:
         model = User
         fields = (
-            'email', 'password', 'first_name', 'last_name',
-            'phone_number', 'date_of_birth', 'gender', 'address',
-            'profile_image', 'timezone', 'age', 'full_name',
+            'id', 'email', 'password', 'username', 'first_name',
+            'last_name', 'phone_number', 'date_of_birth',
+            'gender', 'address', 'profile_image', 'timezone',
+            'user_type', 'status', 'login_type',
         )
         extra_kwargs = {
-            'status': {'required': False},
             'email': {'validators': []},
-            'password': {'write_only': True},
-            'last_login': {'read_only': True},
-            'email_verified_at': {'read_only': True},
-            'player_id': {'read_only': True},
+            'password': {'write_only': True},           
         }
-        read_only_fields = ('full_name', 'age')
+        read_only_fields = (
+            'id', 'full_name', 'age', 'souvenir_token', 
+            'user_type', 'status', 'login_type',
+        )
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request', None)
-        if request and request.user.is_superuser:
-            restricted_representation = RestrictedUserSerializer(instance).data
-            representation.update(restricted_representation)
-        return representation
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = User.objects.create_user(
+            password=password,
+            user_type='rider',
+            status='pending',
+            **validated_data
+        )
+        return user
 
-    def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(_("A user with this email address already exists."))
-        return value
-
-    def validate_phone_number(self, value):
-        if value and User.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError("A user with this phone number already exists.")
-        return value
-
-    def validate_date_of_birth(self, value):
-        if value and (timezone.now().date() - value).days < 365.25 * 18:
-            raise serializers.ValidationError("Users must be at least 18 years old.")
-        return value
-
-    def validate_latitude(self, value):
-        if value is not None and (value < -90 or value > 90):
-            raise serializers.ValidationError("Invalid latitude value. It must be between -90 and 90.")
-        return value
-
-    def validate_longitude(self, value):
-        if value is not None and (value < -180 or value > 180):
-            raise serializers.ValidationError("Invalid longitude value. It must be between -180 and 180.")
-        return value
+    def update(self, instance, validated_data):
+        return super().update(instance, validated_data)

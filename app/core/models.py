@@ -1,20 +1,27 @@
 import os
 import uuid
-import pytz
 
-from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.models import (
+    AbstractBaseUser,
+    BaseUserManager,
+    PermissionsMixin
+)
 
 
-def user_image_file_path(instance, filename):
-    """Generate file path for new user image."""
+def image_file_path(instance, filename):
+    if isinstance(instance, User):
+        prefix = 'user'
+    else:
+        prefix = 'document'
+
     ext = os.path.splitext(filename)[1]
     filename = f'{uuid.uuid4()}{ext}'
 
-    return os.path.join('uploads', 'user', filename)
+    return os.path.join('uploads', prefix, filename)
 
 
 class UserManager(BaseUserManager):
@@ -42,8 +49,6 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
 
-    TIMEZONE_CHOICES = tuple(zip(pytz.all_timezones_set, pytz.all_timezones_set))
-
     class UserTypeChoices(models.TextChoices):
         ADMIN = 'admin', _('Admin')
         RIDER = 'rider', _('Rider')
@@ -61,28 +66,29 @@ class User(AbstractBaseUser, PermissionsMixin):
         REJECT = 'reject', _('Reject')
 
     class LoginTypeChoices(models.TextChoices):
+        MOBILE = 'mobile', _('mobile')
         EMAIL = 'email', _('Email')
         FACEBOOK = 'facebook', _('Facebook')
         GOOGLE = 'google', _('Google')
         TWITTER = 'twitter', _('Twitter')
 
-    uid = models.CharField(_('uid'), max_length=255, null=True, blank=True)
     email = models.EmailField(_('email address'), max_length=70, unique=True)
+    username = models.CharField(_('username'), max_length=50, unique=True, null=True)
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
     phone_number = models.CharField(_('phone'), max_length=17, null=True, blank=True)
     date_of_birth = models.DateField(_('date of birth'), null=True, blank=True)
     gender = models.CharField(_('gender'), max_length=10, choices=GenderUnitChoices.choices, null=True, blank=True)
     address = models.TextField(_('address'), max_length=255, blank=True, null=True)
-    user_type = models.CharField(_('user type'), choices=UserTypeChoices.choices, max_length=10, default='rider')
-    status = models.CharField(_('status'), max_length=20, choices=StatusUnitChoices.choices, default='pending')
+    user_type = models.CharField(_('user type'), max_length=10, choices=UserTypeChoices.choices)
+    status = models.CharField(_('status'), max_length=20, choices=StatusUnitChoices.choices)
 
     fcm_token = models.CharField(_('fcm token'), max_length=255, null=True, blank=True)
-    souvenir_token = models.CharField(_('souvenir token'), max_length=100, null=True, blank=True)
+    remember_token = models.CharField(_('remember token'), max_length=100, null=True, blank=True)
 
-    profile_image = models.ImageField(null=True, upload_to=user_image_file_path)
+    profile_image = models.ImageField(_('profile image'), null=True, upload_to=image_file_path)
 
-    timezone = models.CharField(_('timezone'), max_length=50, choices=TIMEZONE_CHOICES, default='UTC')
+    timezone = models.CharField(_('timezone'), max_length=50, default='UTC')
     email_verified_at = models.DateTimeField(_('email verified at'), null=True, blank=True)
     last_notification_seen = models.DateTimeField(_('last notification seen'), blank=True, null=True)
 
@@ -102,10 +108,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(_('staff'), default=False)
     is_active = models.BooleanField(_('active'), default=True)
 
+    created_at = models.DateTimeField(_('created at'), auto_now=True)
+    updated_at = models.DateTimeField(_('updated at'), auto_now=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name']
+    REQUIRED_FIELDS = ['username', 'user_type']
+
+    class Meta:
+        verbose_name = _('user')
+        verbose_name_plural = _('users')
 
     def __str__(self):
         return self.email
@@ -115,6 +128,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def has_module_perms(self, app_label):
         return self.is_staff
+
+    @property
+    def token(self):
+        return self.auth_token.key
 
     @property
     def full_name(self):
@@ -133,7 +150,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class UserDetail(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_userdetail')
     car_model = models.CharField(_('car model'), max_length=50, blank=True, null=True)
     car_color = models.CharField(_('car color'), max_length=50, blank=True, null=True)
     car_plate_number = models.CharField(_('car plate number'), max_length=20, blank=True, null=True)
@@ -155,8 +172,8 @@ class UserDetail(models.Model):
         return self.car_model if self.car_model else f"UserDetail {self.id}"
 
 
-class UserBankAccounts(models.Model):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+class UserBankAccount(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_userbankaccount')
     bank_name = models.CharField(_('bank name'), max_length=30, blank=True, null=True)
     bank_code = models.CharField(_('bank code'), max_length=40, blank=True, null=True)
     account_holder_name = models.CharField(_('account holder name'), max_length=70, blank=True, null=True)
@@ -173,7 +190,7 @@ class UserBankAccounts(models.Model):
 
 
 class Wallet(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='user_wallet')
     total_amount = models.FloatField(_('total amount'), blank=True, null=True)
     online_received = models.FloatField(_('online received'), blank=True, null=True)
     collected_cash = models.FloatField(_('collected cash'), blank=True, null=True)
@@ -204,3 +221,93 @@ class Roles(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Document(models.Model):
+    name = models.CharField(_('name'), max_length=30, blank=True, null=True)
+    type = models.CharField(_('type'), max_length=30, default='driver')
+    is_required = models.BooleanField(_('is required'), default=False)
+    has_expiry_date = models.BooleanField(_('has expiry date'), default=False)
+    status = models.IntegerField(_('status'), blank=True, null=True)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('document')
+        verbose_name_plural = _('documents')
+
+    def __str__(self):
+        return self.name
+
+
+class DriverDocument(models.Model):
+    document_id = models.ForeignKey(Document, on_delete=models.CASCADE, related_name='document_id_driverdocument')
+    driver_id = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='driver_id_driverdocument')
+    expire_date = models.DateField(_('expiry date'), blank=True, null=True)
+    is_verified = models.BooleanField(_('is verified'), default=False)
+    document_image = models.ImageField(_('document image'), null=True, upload_to=image_file_path)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('driver document')
+        verbose_name_plural = _('driver document')
+
+
+class Regions(models.Model):
+
+    class DistanceUnitChoices(models.TextChoices):
+        KM = 'km', _('Km')
+        MILE = 'mile', _('Mile')
+
+    name = models.CharField(_('name'), max_length=30, null=True)
+    distance_unit = models.CharField(_('distance unit'), choices=DistanceUnitChoices.choices, max_length=5, default=DistanceUnitChoices.KM)
+    coordinates = models.CharField(_('coordinates'), max_length=100, blank=True, null=True)
+    status = models.IntegerField(_('status'), default=1)
+    timezone = models.CharField(_('timezone'), max_length=30, default='UTC')
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('regions')
+        verbose_name_plural = _('regions')
+
+    def __str__(self):
+        return self.name
+
+
+class Sos(models.Model):
+
+    class StatusChoices(models.TextChoices):
+        ACTIVE = 'active', _('Active')
+        INACTIVE = 'inactive', _('Inactive')
+
+    region = models.ForeignKey(Regions, on_delete=models.CASCADE, related_name='region_sos')
+    title = models.CharField(_('title'), max_length=255, blank=True, null=True)
+    contact_number = models.CharField(_('contact number'), max_length=17, blank=True, null=True)
+    status = models.CharField(_('status'), max_length=9, choices=StatusChoices.choices, default=StatusChoices.ACTIVE)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    updated_at = models.DateTimeField(_('updated at'), blank=True, null=True)
+
+    class Meta:
+        verbose_name = _('sos')
+        verbose_name_plural = _('sos')
+
+    def __str__(self):
+        return f'{self.title} ({self.region})'
+
+
+class Notification(models.Model):
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_notifications')
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='received_notifications')
+    title = models.CharField(_('title'), max_length=255, blank=True, null=True)
+    message = models.TextField(_('message'), max_length=255, blank=True, null=True)
+    read = models.BooleanField(_('read'), default=False)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.sender} -> {self.recipient}: {self.message}"
