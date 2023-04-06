@@ -89,6 +89,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
         model = UserDetail
         fields = '__all__'
 
+
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=4)
 
@@ -105,7 +106,7 @@ class UserSerializer(serializers.ModelSerializer):
             'password': {'write_only': True},           
         }
         read_only_fields = (
-            'id', 'full_name', 'age', 'souvenir_token', 
+            'id', 'full_name', 'age', 'remember_token', 
             'user_type', 'status', 'login_type',
         )
 

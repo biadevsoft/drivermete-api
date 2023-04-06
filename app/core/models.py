@@ -1,14 +1,23 @@
 import os
 import uuid
+import json
 
+from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from django.db import models
+from django.dispatch import receiver
+from django.db.models.signals import post_save
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.models import (
     AbstractBaseUser,
     BaseUserManager,
     PermissionsMixin
+)
+
+from django_celery_beat.models import (
+    MINUTES,
+    PeriodicTask,
+    CrontabSchedule,
 )
 
 
@@ -298,16 +307,28 @@ class Sos(models.Model):
         return f'{self.title} ({self.region})'
 
 
-class Notification(models.Model):
-    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_notifications')
-    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='received_notifications')
-    title = models.CharField(_('title'), max_length=255, blank=True, null=True)
-    message = models.TextField(_('message'), max_length=255, blank=True, null=True)
-    read = models.BooleanField(_('read'), default=False)
-    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+class BroadcastNotification(models.Model):
+    message = models.TextField()
+    broadcast_on = models.DateTimeField()
+    sent = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-broadcast_on']
 
-    def __str__(self):
-        return f"{self.sender} -> {self.recipient}: {self.message}"
+
+@receiver(post_save, sender=BroadcastNotification)
+def notification_handler(sender, instance, created, **kwargs):
+    # call group_send function directly to send notificatoions or you can create a dynamic task in celery beat
+    if created:
+        schedule, created = CrontabSchedule.objects.get_or_create(
+            hour = instance.broadcast_on.hour, 
+            minute = instance.broadcast_on.minute, 
+            day_of_month = instance.broadcast_on.day, 
+            month_of_year = instance.broadcast_on.month
+        )
+        task = PeriodicTask.objects.create(
+            crontab=schedule, 
+            name="broadcast-notification-"+str(instance.id), 
+            task="notification.tasks.broadcast_notification", 
+            args=json.dumps((instance.id,))
+        )

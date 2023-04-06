@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.utils.decorators import method_decorator
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
@@ -17,6 +18,8 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import AuthenticationFailed
+
+from django_ratelimit.decorators import ratelimit
 
 from user.tasks import send_activation_email
 from user.serializers import UserSerializer
@@ -29,6 +32,7 @@ class UserRegisterView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = UserSerializer
 
+    @ratelimit(key='ip', rate='10/m')
     def post(self, request, *args, **kwargs):
         try:
             serializer = self.get_serializer(data=request.data)
@@ -67,6 +71,7 @@ class UserRegisterView(generics.CreateAPIView):
 
 
 class ActivateAccountView(generics.GenericAPIView):
+    serializer_class = UserSerializer
     permission_classes = [AllowAny]
 
     def get(self, request, uidb64, token): 
@@ -83,7 +88,7 @@ class ActivateAccountView(generics.GenericAPIView):
             if default_token_generator.check_token(user, token): 
                 user.email_verified_at = timezone.now() 
                 token_generator = default_token_generator 
-                user.souvenir_token = token_generator.make_token(user) 
+                user.remember_token = token_generator.make_token(user) 
                 user.save() 
                 return Response({'detail': 'Account activated successfully'}) 
 
@@ -96,6 +101,8 @@ class ActivateAccountView(generics.GenericAPIView):
 
 
 class LoginView(APIView):
+    serializer_class = UserSerializer
+
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
@@ -123,6 +130,8 @@ class LoginView(APIView):
 
 
 class LogoutView(APIView):
+    serializer_class = UserSerializer
+
     def post(self, request):
         response = Response()
         response.delete_cookie('jwt')
@@ -131,7 +140,9 @@ class LogoutView(APIView):
 
 
 class UserView(APIView):
+    serializer_class = UserSerializer
 
+    @method_decorator(ratelimit(key='ip', rate='1/s'))
     def get(self, request):
         token = request.COOKIES.get('jwt')
 

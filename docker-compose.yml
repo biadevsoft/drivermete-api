@@ -7,12 +7,14 @@ services:
 
   db:
     image: postgres:15.2-alpine3.17
+    env_file:
+      - .env
     volumes:
       - dev-db-data:/var/lib/postresql/data
     environment:
-      - POSTGRES_DB=drivermetedb
-      - POSTGRES_USER=biadevsoft
-      - POSTGRES_PASSWORD=aqwzsx1928
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
   app:
     build:
@@ -21,18 +23,22 @@ services:
         - DEV=true
     ports:
       - "8000:8000"
+      - "8001:8001"
     volumes:
       - ./app:/app
       - dev-static-data:/vol/web
+    user: appuser
+    env_file:
+      - .env
     command:
       sh -c "python manage.py wait_for_db &&
              python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
     environment:
-      - DB_HOST=db
-      - DB_NAME=drivermetedb
-      - DB_USER=biadevsoft
-      - DB_PASS=aqwzsx1928
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASS=${POSTGRES_PASSWORD}
     depends_on:
       - db
 
@@ -44,15 +50,41 @@ services:
     command: celery -A app worker -l INFO
     volumes:
       - ./app:/app
+    user: appuser
+    env_file:
+      - .env
     environment:
-      - DB_HOST=db
-      - DB_NAME=drivermetedb
-      - DB_USER=biadevsoft
-      - DB_PASS=aqwzsx1928
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASS=${POSTGRES_PASSWORD}
     depends_on:
       - db
       - redis
       - app
+
+  channels_celery:
+    build:
+      context: .
+    command: sh -c "daphne -b 0.0.0.0 -p ${CHANNELS_PORT} app.asgi:application & celery -A app worker -l ${CELERY_LOG_LEVEL}"
+    volumes:
+      - ./app:/app
+    user: appuser
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASS=${POSTGRES_PASSWORD}
+      - REDIS_URL=${REDIS_URL}
+      - CHANNELS_PORT=${CHANNELS_PORT}
+      - CELERY_LOG_LEVEL=${CELERY_LOG_LEVEL}
+    depends_on:
+      - db
+      - redis
+      - app
+      - celery
 
 volumes:
   dev-db-data:
