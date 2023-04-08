@@ -11,6 +11,7 @@ class UserAdmin(BaseUserAdmin):
     list_display = ['email', 'username', 'user_type', 'created_at']
     filter_horizontal = ()
     list_filter = ('user_type', 'is_active', 'is_staff')
+
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         (_('Personal Info'), {'fields': ('username', 'user_type')}),
@@ -31,10 +32,10 @@ class UserAdmin(BaseUserAdmin):
         (None, {
             'classes': ('wide',),
             'fields': (
-                'email',
+                'username',
                 'password1',
                 'password2',
-                'username',
+                'email',
                 'user_type',
                 'is_active',
                 'is_staff',
@@ -42,5 +43,6 @@ class UserAdmin(BaseUserAdmin):
             ),
         }),
     )
+
 
 admin.site.register(models.User, UserAdmin)
