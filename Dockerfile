@@ -1,4 +1,4 @@
-FROM python:3.9.16-alpine3.17
+FROM python:alpine3.17
 
 ENV PYTHONUNBUFFERED 1
 
@@ -34,8 +34,6 @@ RUN python -m venv /py && \
 
 ENV PATH="/scripts:/py/bin:$PATH"
 
-# Switch to soft
 USER soft
 
-# Set the entrypoint
 #ENTRYPOINT ["run.sh"]

@@ -21,6 +21,8 @@ urlpatterns = [
     path('api/schema/', SpectacularAPIView.as_view(), name='api-schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='api-schema'), name='api-docs'),
     path('api/v1/user/', include(('user.urls', 'user'), namespace='user')),
+    path('api/v1/rider/', include(('rider.urls', 'rider'), namespace='rider')),
+    path('api/v1/driver/', include(('driver.urls', 'driver'), namespace='driver')),
 ]
 
 if settings.DEBUG:

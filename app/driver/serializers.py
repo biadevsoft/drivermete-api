@@ -3,7 +3,6 @@ import pytz
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from django.contrib.auth import password_validation
 from django.utils.translation import gettext_lazy as _
 
 from rest_framework import serializers
@@ -13,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 User = get_user_model()
 
 
-class AdminSerializer(serializers.ModelSerializer):
+class DriverSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True)
     username = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, min_length=6, style={'input_type': 'password'})
@@ -26,13 +25,14 @@ class AdminSerializer(serializers.ModelSerializer):
             'id', 'email', 'password', 'confirm_password',
             'username', 'first_name', 'last_name',
             'phone_number', 'date_of_birth', 'gender',
-            'address', 'user_type', 'status'
+            'address', 'profile_image', 'timezone',
+            'user_type', 'status', 'login_type',
         )
         extra_kwargs = {
             'email': {'read_only': True},
         }
         read_only_fields = (
-            'id', 'full_name', 'age', 'remember_token', 'user_type', 'status',
+            'id', 'full_name', 'age', 'remember_token', 'user_type', 'status', 'login_type',
         )
 
     def validate(self, data):
@@ -57,6 +57,28 @@ class AdminSerializer(serializers.ModelSerializer):
         if gender:
             if gender not in User.GenderUnitChoices.values:
                 raise serializers.ValidationError(_('Invalid gender choice.'))
+
+        profile_image = data.get('profile_image')
+        if profile_image:
+            # Check if the uploaded file is an image
+            if not profile_image.content_type.startswith('image'):
+                raise serializers.ValidationError(_('File must be an image.'))
+
+            # Check if the image is too large
+            if profile_image.size > (1024 * 1024):
+                raise serializers.ValidationError(_('Image file size must be under 1 MB.'))
+
+            # Check if the image is too small
+            if profile_image.width < 100 or profile_image.height < 100:
+                raise serializers.ValidationError(_('Image dimensions must be at least 100x100 px.'))
+
+        timezone_data = data.get('timezone')
+        if timezone_data:
+            try:
+                timezone.activate(pytz.timezone(timezone_data))
+                timezone.deactivate()
+            except pytz.UnknownTimeZoneError:
+                raise serializers.ValidationError(_('Invalid timezone choice.'))
 
         # convertir le format de phone_number
         phone_number = data['phone_number']
@@ -83,8 +105,9 @@ class AdminSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             email=email,
             password=password,
-            user_type='manager',
+            user_type='driver',
             status='pending',
+            login_type='email',
             **validated_data
         )
         user.set_password(password)
@@ -100,38 +123,6 @@ class AdminSerializer(serializers.ModelSerializer):
         if password:
             instance.set_password(password)
         return instance
-
-
-class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True, style={'input_type': 'password'})
-    new_password = serializers.CharField(required=True, style={'input_type': 'password'})
-    confirm_password = serializers.CharField(required=True, style={'input_type': 'password'})
-
-    def validate_new_password(self, value):
-        password_validation.validate_password(value)
-        return value
-
-    def validate_old_password(self, value):
-        user = self.get_user()
-        if not user.check_password(value):
-            raise serializers.ValidationError(_('Invalid password'))
-        return value
-
-    def validate(self, data):
-        if data['old_password'] == data['new_password']:
-            raise serializers.ValidationError(_('New password cannot be same as old password'))
-        if data['new_password'] != data['confirm_password']:
-            raise serializers.ValidationError(_('Passwords do not match'))
-        return data
-
-    def save(self, **kwargs):
-        user = self.get_user()
-        user.set_password(self.validated_data['new_password'])
-        user.save()
-        return user
-
-    def get_user(self):
-        return self.context['request'].user
 
 
 class MyTokenObtainPairSerializer(serializers.Serializer):
@@ -157,6 +148,6 @@ class MyTokenObtainPairSerializer(serializers.Serializer):
 
     def get_token(self, user):
         token = RefreshToken.for_user(user)
-        user_data = AdminSerializer(user).data
+        user_data = DriverSerializer(user).data
 
         token['user'] = user_data

@@ -51,6 +51,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class UserTypeChoices(models.TextChoices):
         ADMIN = 'admin', _('Admin')
+        MANAGER = 'manager', _('Manager')
         RIDER = 'rider', _('Rider')
         DRIVER = 'driver', _('Driver')
 
@@ -76,7 +77,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(_('username'), max_length=50, unique=True, null=True)
     first_name = models.CharField(_('first name'), max_length=30, blank=True)
     last_name = models.CharField(_('last name'), max_length=30, blank=True)
-    phone_number = models.CharField(_('phone'), max_length=17, null=True, blank=True)
+    phone_number = models.CharField(_('phone'), max_length=17, unique=True, null=True)
     date_of_birth = models.DateField(_('date of birth'), null=True, blank=True)
     gender = models.CharField(_('gender'), max_length=10, choices=GenderUnitChoices.choices, default='male')
     address = models.TextField(_('address'), max_length=255, blank=True, null=True)

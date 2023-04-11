@@ -26,7 +26,7 @@ services:
       - db
 
   db:
-    image: postgres:15.2-alpine3.17
+    image: postgres:alpine3.17
     volumes:
       - dev-db-data:/var/lib/postresql/data
     container_name: db
