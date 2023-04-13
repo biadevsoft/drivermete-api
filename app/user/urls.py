@@ -7,7 +7,6 @@ from user.views import (
     UserPasswordChangeView,
     #UserLogoutView,
 )
-
 app_name = 'user'
 
 
