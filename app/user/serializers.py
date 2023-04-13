@@ -13,7 +13,27 @@ from rest_framework_simplejwt.tokens import RefreshToken
 User = get_user_model()
 
 
-class AdminSerializer(serializers.ModelSerializer):
+class UserListAllSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'user_type', 'fleet_id', 'is_online', 'status']
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        # Ajoute les informations supplémentaires à retourner dans la réponse
+        # Si l'utilisateur est un rider, on renvoie la liste des courses qu'il a effectuées
+        if instance.user_type == 'rider':
+            ret['completed_rides'] = instance.rides.filter(status='completed').count()
+            ret['cancelled_rides'] = instance.rides.filter(status='cancelled').count()
+        # Si l'utilisateur est un driver, on renvoie la liste des courses qu'il a effectuées et son taux de satisfaction
+        elif instance.user_type == 'driver':
+            ret['completed_rides'] = instance.rides.filter(status='completed').count()
+            ret['cancelled_rides'] = instance.rides.filter(status='cancelled').count()
+            ret['satisfaction_rate'] = instance.driver_profile.satisfaction_rate
+        return ret
+
+class UserSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True)
     username = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, min_length=6, style={'input_type': 'password'})
@@ -26,7 +46,7 @@ class AdminSerializer(serializers.ModelSerializer):
             'id', 'email', 'password', 'confirm_password',
             'username', 'first_name', 'last_name',
             'phone_number', 'date_of_birth', 'gender',
-            'address', 'user_type', 'status'
+            'address', 'user_type', 'status',
         )
         extra_kwargs = {
             'email': {'read_only': True},
@@ -83,8 +103,9 @@ class AdminSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(
             email=email,
             password=password,
-            user_type='manager',
+            user_type='staff',
             status='pending',
+            is_staff=True,
             **validated_data
         )
         user.set_password(password)
@@ -134,29 +155,5 @@ class ChangePasswordSerializer(serializers.Serializer):
         return self.context['request'].user
 
 
-class MyTokenObtainPairSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    password = serializers.CharField(write_only=True)
 
-    def validate(self, attrs):
-        email = attrs.get('email')
-        password = attrs.get('password')
 
-        user = User.objects.filter(email=email).first()
-        if not user:
-            raise serializers.ValidationError(_('Invalid email or password.'))
-
-        if not user.check_password(password):
-            raise serializers.ValidationError(_('Invalid email or password.'))
-
-        if not user.is_active:
-            raise serializers.ValidationError(_('This account is inactive.'))
-
-        attrs['user'] = user
-        return attrs
-
-    def get_token(self, user):
-        token = RefreshToken.for_user(user)
-        user_data = AdminSerializer(user).data
-
-        token['user'] = user_data

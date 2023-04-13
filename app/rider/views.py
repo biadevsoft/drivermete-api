@@ -9,7 +9,7 @@ from rest_framework.permissions import (
     AllowAny,
 )
 
-from rider.serializers import UserSerializer
+from rider.serializers import RiderSerializer
 
 
 User = get_user_model()
@@ -17,7 +17,7 @@ User = get_user_model()
 
 class UserRegisterView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
-    serializer_class = UserSerializer
+    serializer_class = RiderSerializer
 
     def post(self, request, *args, **kwargs):
         try:
@@ -29,7 +29,7 @@ class UserRegisterView(generics.CreateAPIView):
                 'status': 'success',
                 'message': 'User registered successfully.',
                 'data': {
-                    'user': UserSerializer(user, context={'request': request}).data,
+                    'user': RiderSerializer(user, context={'request': request}).data,
                 }
             }
             return Response(response_data, status=status.HTTP_201_CREATED)

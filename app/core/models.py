@@ -51,7 +51,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class UserTypeChoices(models.TextChoices):
         ADMIN = 'admin', _('Admin')
-        MANAGER = 'manager', _('Manager')
+        STAFF = 'staff', _('Staff')
         RIDER = 'rider', _('Rider')
         DRIVER = 'driver', _('Driver')
 

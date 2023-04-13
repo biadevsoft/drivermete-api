@@ -12,7 +12,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
+class RiderSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=True)
     username = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, min_length=6, style={'input_type': 'password'})
@@ -148,6 +148,6 @@ class MyTokenObtainPairSerializer(serializers.Serializer):
 
     def get_token(self, user):
         token = RefreshToken.for_user(user)
-        user_data = UserSerializer(user).data
+        user_data = RiderSerializer(user).data
 
         token['user'] = user_data

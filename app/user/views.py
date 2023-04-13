@@ -1,4 +1,5 @@
 from django.db import IntegrityError
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
@@ -9,56 +10,90 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.generics import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
 
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
 
 from app.utils.custom_pagination import CustomPagination
-from user.serializers import AdminSerializer, ChangePasswordSerializer
-from rider.serializers import UserSerializer
-from driver.serializers import DriverSerializer
+from user.serializers import UserSerializer, ChangePasswordSerializer, UserListAllSerializer
 
 
 User = get_user_model()
 
 
-class UserListView(generics.ListAPIView):
-    serializer_class = AdminSerializer
-    pagination_class = CustomPagination
-    permission_classes = (IsAdminUser)
+class UserListAllView(APIView):
+    queryset = User.objects.all()
+    permission_classes = [IsAuthenticated]
+    serializer_class = [UserListAllSerializer]
+    pagination_class = CustomPagination()
+    authentication_classes = [JWTAuthentication]
 
     def get_queryset(self):
+        user = self.request.user
+
+        if not user.is_superuser and not user.is_staff:
+            raise PermissionDenied(_('You are not authorized to access this resource.'))
+
         user_type = self.request.query_params.get('user_type', 'rider')
         fleet_id = self.request.query_params.get('fleet_id', None)
         is_online = self.request.query_params.get('is_online', None)
         status = self.request.query_params.get('status', None)
-        per_page = self.request.query_params.get('per_page', 10)
 
-        user_list = User.objects.all()
+        queryset = User.objects.all()
+
+        if user.is_staff:
+            if user_type not in ['rider', 'driver']:
+                raise PermissionDenied(_('You are not authorized to access this resource.'))
+
+            fleet = user.is_staff
+            if not fleet:
+                return queryset.none()
+
+
         if user_type:
-            user_list = user_list.filter(user_type=user_type)
+            queryset = queryset.filter(user_type=user_type)
         if fleet_id:
-            user_list = user_list.filter(fleet_id=fleet_id)
+            queryset = queryset.filter(fleet_id=fleet_id)
         if is_online is not None:
-            user_list = user_list.filter(is_online=is_online)
+            queryset = queryset.filter(is_online=is_online)
         if status is not None:
-            user_list = user_list.filter(status=status)
+            queryset = queryset.filter(status=status)
 
-        if per_page == '-1':
-            per_page = user_list.count()
+        per_page_param = self.request.query_params.get('per_page', None)
+        if per_page_param is not None:
+            try:
+                per_page = int(per_page_param)
+                if per_page == -1:
+                    per_page = queryset.count()
+                elif per_page < 1:
+                    per_page = settings.REST_FRAMEWORK['PAGE_SIZE']
+            except ValueError:
+                per_page = settings.REST_FRAMEWORK['PAGE_SIZE']
 
-        self.pagination_class.page_size = int(per_page)
-        return user_list
+        self.pagination_class.page_size = per_page
 
-    def get_serializer_class(self):
-        user_type = self.request.query_params.get('user_type', 'rider')
-        return DriverSerializer if user_type == 'driver' else UserSerializer
+        return queryset.order_by('-id')
+
+    def get(self, request):
+        queryset = self.get_queryset()
+        page = self.pagination_class.paginate_queryset(queryset, request)
+
+        if page is not None:
+            serializer = self.serializer_class(page, many=True)
+            return self.pagination_class.get_paginated_response(serializer.data)
+
+        serializer = self.serializer_class(queryset, many=True)
+        return Response(serializer.data)
 
 
 class ManagerRegisterView(generics.CreateAPIView):
-    permission_classes = (IsAdminUser,)
-    serializer_class = AdminSerializer
+    permission_classes = (AllowAny,)
+    serializer_class = UserSerializer
 
     def post(self, request, *args, **kwargs):
         try:
@@ -70,7 +105,7 @@ class ManagerRegisterView(generics.CreateAPIView):
                 'status': 'success',
                 'message': 'User registered successfully.',
                 'data': {
-                    'user': AdminSerializer(user, context={'request': request}).data,
+                    'user': UserSerializer(user, context={'request': request}).data,
                 }
             }
             return Response(response_data, status=status.HTTP_201_CREATED)
@@ -97,7 +132,7 @@ class ManagerRegisterView(generics.CreateAPIView):
         
 
 class UpdateUserStatus(APIView):
-    serializer_class = AdminSerializer
+    serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
     authentication_classes = [JWTAuthentication]
 
@@ -118,15 +153,14 @@ class UpdateUserStatus(APIView):
         serializer = self.serializer_class(user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
+"""
 class UserLogoutView(APIView):
+    serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     authentication_classes = [JWTAuthentication]
 
     def post(self, request):
-        """
-        Log out a user and delete their auth token.
-        """
+       
         try:
             refresh_token = request.data['refresh_token']
             token = RefreshToken(refresh_token)
@@ -134,9 +168,10 @@ class UserLogoutView(APIView):
         except Exception:
             return Response({'error': 'Invalid token provided.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response({'message': 'User logged out successfully.'}, status=status.HTTP_200_OK)
-
+"""
 
 class UserPasswordChangeView(APIView):
+    serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
@@ -156,5 +191,5 @@ class UserPasswordChangeView(APIView):
         request.user.set_password(new_password)
         request.user.save()
 
-        serializer = AdminSerializer(request.user, context={'request': request})
+        serializer = UserSerializer(request.user, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
